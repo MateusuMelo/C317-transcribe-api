@@ -51,40 +51,6 @@ async def transcribe_audio_file(
         raise HTTPException(500, f"Transcription error: {str(e)}")
 
 
-@router.post("/transcribe/stream")
-async def transcribe_audio_stream(
-        file: UploadFile = File(...),
-        chunk_duration: int = 5000,
-        language: str = None
-):
-    if not FileHandler.is_audio_file(file.filename):
-        raise HTTPException(400, "File must be an audio file")
-    try:
-        chunk_gen = chunk_generator(file)
-
-        async def generate_transcriptions():
-            async for transcription in transcription_service.transcribe_audio_stream(
-                    audio_stream=chunk_gen,
-                    chunk_duration=chunk_duration,
-                    language=language,
-                    task="transcribe"
-            ):
-                if transcription:
-                    yield f"data: {transcription}\n\n"
-
-        return StreamingResponse(
-            generate_transcriptions(),
-            media_type="text/plain",
-            headers={
-                "Cache-Control": "no-cache",
-                "Connection": "keep-alive",
-            }
-        )
-
-    except Exception as e:
-        raise HTTPException(500, f"Streaming error: {str(e)}")
-
-
 @router.get("/health")
 async def health_check():
     """API health check"""

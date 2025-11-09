@@ -20,25 +20,95 @@ class TranscriptionService:
     def __init__(self):
         self.model: Optional[WhisperModel] = None
         self.audio_converter = AudioConverter()
+        self._initialized = False
 
     async def initialize(self):
         """Initialize Whisper model"""
-        if self.model is None:
-            try:
-                loop = asyncio.get_event_loop()
-                self.model = await loop.run_in_executor(
-                    None,
-                    lambda: WhisperModel(
-                        settings.WHISPER_MODEL_SIZE,
-                        device=settings.WHISPER_DEVICE,
-                        compute_type=settings.WHISPER_COMPUTE_TYPE,
-                        download_root=settings.MODEL_CACHE_DIR
-                    )
+        if self._initialized and self.model is not None:
+            return
+
+        try:
+            loop = asyncio.get_event_loop()
+            self.model = await loop.run_in_executor(
+                None,
+                lambda: WhisperModel(
+                    settings.WHISPER_MODEL_SIZE,
+                    device=settings.WHISPER_DEVICE,
+                    compute_type=settings.WHISPER_COMPUTE_TYPE,
+                    download_root=settings.MODEL_CACHE_DIR
                 )
-                print(f"Whisper model '{settings.WHISPER_MODEL_SIZE}' loaded successfully!")
+            )
+            self._initialized = True
+            print(f"Whisper model '{settings.WHISPER_MODEL_SIZE}' loaded successfully!")
+        except Exception as e:
+            print(f"Error loading Whisper model: {e}")
+            raise
+
+    async def transcribe_audio_file(
+            self,
+            audio_data: bytes,
+            file_extension: str = "wav",
+            task: str = "translate",
+            language: Optional[str] = None
+    ) -> TranscriptionResponse:
+        """Transcribe complete audio file"""
+        await self.initialize()
+
+        # Ensure model is properly initialized
+        if self.model is None:
+            raise Exception("Whisper model not initialized")
+
+        with tempfile.NamedTemporaryFile(
+                suffix=f".{file_extension}",
+                delete=False,
+                dir=settings.TEMP_UPLOAD_DIR
+        ) as temp_file:
+            temp_file.write(audio_data)
+            temp_path = temp_file.name
+
+        converted_path = None
+        try:
+            # Convert audio if necessary
+            converted_path = await self.audio_converter.ensure_compatible_audio(temp_path)
+
+            # Execute transcription in thread pool
+            loop = asyncio.get_event_loop()
+            segments, info = await loop.run_in_executor(
+                None,
+                lambda: self.model.transcribe(
+                    converted_path,
+                    task=task,
+                    language=language,
+                    beam_size=5,
+                    best_of=5,
+                    vad_filter=True
+                )
+            )
+
+            # Combine all segments into full text
+            full_text = " ".join(segment.text for segment in segments)
+
+            return TranscriptionResponse(
+                text=full_text.strip(),
+                language=info.language,
+                confidence=getattr(info, 'language_probability', None),
+                duration=sum(segment.duration for segment in segments),
+                processed_at=datetime.now()
+            )
+
+        except Exception as e:
+            print(f"Error in transcribe_audio_file: {e}")
+            raise Exception(f"Transcription error: {str(e)}")
+
+        finally:
+            # Cleanup temporary files
+            try:
+                if converted_path and os.path.exists(converted_path) and converted_path != temp_path:
+                    os.unlink(converted_path)
+                if os.path.exists(temp_path):
+                    os.unlink(temp_path)
             except Exception as e:
-                print(f"Error loading Whisper model: {e}")
-                raise
+                print(f"Warning: Error cleaning up temp files: {e}")
 
     def _raw_audio_to_wav_bytes(self, raw_audio: bytes, sample_rate: int = 16000, channels: int = 1) -> bytes:
         """Convert raw PCM audio to WAV format bytes"""
@@ -83,6 +153,11 @@ class TranscriptionService:
     ) -> str:
         """Transcribe a single audio chunk in real-time"""
         await self.initialize()
+
+        # Ensure model is properly initialized
+        if self.model is None:
+            print("❌ Whisper model not initialized")
+            return ""
 
         try:
             # Check if it's raw PCM data or formatted audio

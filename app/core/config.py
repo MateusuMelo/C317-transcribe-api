@@ -1,4 +1,5 @@
 import os
+from pathlib import Path
 
 from pydantic_settings import BaseSettings
 
@@ -20,13 +21,14 @@ class Settings(BaseSettings):
     AUDIO_CHUNK_SIZE: int = 1024
     MAX_AUDIO_SIZE_MB: int = 50
 
-    # Paths
-    TEMP_UPLOAD_DIR: str = "/tmp"
-    MODEL_CACHE_DIR: str = "/app/models"
+    BASE_DIR: Path = Path(__file__).resolve().parent.parent
+
+    TEMP_UPLOAD_DIR: str = os.getenv("TEMP_UPLOAD_DIR", str(BASE_DIR / "tmp"))
+    MODEL_CACHE_DIR: str = os.getenv("MODEL_CACHE_DIR", str(BASE_DIR / "models"))
+    LOG_FILE: str = os.getenv("LOG_FILE", str(BASE_DIR / "logs" / "app.log"))
 
     # Logging
     LOG_LEVEL: str = "INFO"
-    LOG_FILE: str = "logs/app.log"
 
     class Config:
         env_file = ".env"
@@ -37,4 +39,4 @@ settings = Settings()
 
 os.makedirs(settings.TEMP_UPLOAD_DIR, exist_ok=True)
 os.makedirs(settings.MODEL_CACHE_DIR, exist_ok=True)
-os.makedirs("logs", exist_ok=True)
+os.makedirs(Path(settings.LOG_FILE).parent, exist_ok=True)
