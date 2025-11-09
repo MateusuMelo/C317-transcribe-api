@@ -1,0 +1,186 @@
+<!-- app/static/realtime_transcribe.html -->
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Transcrição em Tempo Real</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 40px;
+        }
+
+        .container {
+            max-width: 800px;
+            margin: 0 auto;
+        }
+
+        .status {
+            padding: 10px;
+            margin: 10px 0;
+            border-radius: 5px;
+        }
+
+        .connected {
+            background: #d4edda;
+            color: #155724;
+        }
+
+        .disconnected {
+            background: #f8d7da;
+            color: #721c24;
+        }
+
+        #transcription {
+            border: 1px solid #ccc;
+            padding: 20px;
+            min-height: 100px;
+            margin: 20px 0;
+            border-radius: 5px;
+            background: #f8f9fa;
+        }
+
+        button {
+            padding: 10px 20px;
+            margin: 5px;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+        }
+
+        #startBtn {
+            background: #28a745;
+            color: white;
+        }
+
+        #stopBtn {
+            background: #dc3545;
+            color: white;
+        }
+
+        .loading {
+            color: #6c757d;
+        }
+    </style>
+</head>
+<body>
+<div class="container">
+    <h1>🎤 Transcrição em Tempo Real</h1>
+
+    <div class="status disconnected" id="status">
+        Desconectado
+    </div>
+
+    <button id="startBtn" onclick="startRecording()">🎤 Iniciar Gravação</button>
+    <button disabled id="stopBtn" onclick="stopRecording()">⏹️ Parar</button>
+
+    <div>
+        <h3>Transcrição:</h3>
+        <div id="transcription">
+            <em class="loading">Clique em "Iniciar Gravação" para começar...</em>
+        </div>
+    </div>
+</div>
+
+<script>
+    let mediaRecorder;
+    let audioChunks = [];
+    let websocket;
+    const transcriptionElement = document.getElementById('transcription');
+    const statusElement = document.getElementById('status');
+
+    async function startRecording() {
+        try {
+            // Conectar WebSocket
+            const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+            const wsUrl = `${protocol}//${window.location.host}/ws/transcribe`;
+
+            websocket = new WebSocket(wsUrl);
+
+            websocket.onopen = () => {
+                statusElement.className = 'status connected';
+                statusElement.textContent = 'Conectado - Gravando...';
+                updateButtons(true);
+            };
+
+            websocket.onmessage = (event) => {
+                const data = JSON.parse(event.data);
+                if (data.type === 'transcription' && data.text) {
+                    transcriptionElement.innerHTML =
+                        `<strong>Transcrição:</strong> ${data.text}`;
+                }
+            };
+
+            websocket.onclose = () => {
+                statusElement.className = 'status disconnected';
+                statusElement.textContent = 'Desconectado';
+                updateButtons(false);
+            };
+
+            // Configurar gravação de áudio
+            const stream = await navigator.mediaDevices.getUserMedia({
+                audio: {
+                    channelCount: 1,
+                    sampleRate: 16000,
+                    echoCancellation: true,
+                    noiseSuppression: true
+                }
+            });
+
+            mediaRecorder = new MediaRecorder(stream, {
+                mimeType: 'audio/webm; codecs=opus'
+            });
+
+            mediaRecorder.ondataavailable = (event) => {
+                if (event.data.size > 0 && websocket.readyState === WebSocket.OPEN) {
+                    // Converter Blob para base64
+                    const reader = new FileReader();
+                    reader.onload = function () {
+                        const base64Audio = reader.result.split(',')[1];
+                        websocket.send(JSON.stringify({
+                            type: 'audio_chunk',
+                            data: base64Audio,
+                            is_final: false
+                        }));
+                    };
+                    reader.readAsDataURL(event.data);
+                }
+            };
+
+            // Gravar em chunks de 1 segundo
+            mediaRecorder.start(1000);
+
+        } catch (error) {
+            console.error('Erro ao iniciar gravação:', error);
+            alert('Erro ao acessar microfone: ' + error.message);
+        }
+    }
+
+    function stopRecording() {
+        if (mediaRecorder && mediaRecorder.state !== 'inactive') {
+            mediaRecorder.stop();
+            mediaRecorder.stream.getTracks().forEach(track => track.stop());
+        }
+
+        if (websocket) {
+            websocket.close();
+        }
+
+        updateButtons(false);
+        statusElement.className = 'status disconnected';
+        statusElement.textContent = 'Gravação parada';
+    }
+
+    function updateButtons(recording) {
+        document.getElementById('startBtn').disabled = recording;
+        document.getElementById('stopBtn').disabled = !recording;
+    }
+
+    // Ping para manter conexão ativa
+    setInterval(() => {
+        if (websocket && websocket.readyState === WebSocket.OPEN) {
+            websocket.send(JSON.stringify({type: 'ping'}));
+        }
+    }, 30000);
+</script>
+</body>
+</html>

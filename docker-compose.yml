@@ -1,0 +1,27 @@
+# docker-compose.yml
+version: '3.8'
+
+services:
+  audio-transcription-api:
+    build: .
+    ports:
+      - "8000:8000"
+    environment:
+      - API_HOST=0.0.0.0
+      - API_PORT=8000
+      - API_RELOAD=false
+      - WHISPER_MODEL_SIZE=base
+      - WHISPER_DEVICE=cpu
+      - WHISPER_COMPUTE_TYPE=int8
+      - MAX_AUDIO_SIZE_MB=25
+      - MODEL_CACHE_DIR=/app/models
+      - TEMP_UPLOAD_DIR=/tmp
+    volumes:
+      - ./data/temp_uploads:/tmp  # Para arquivos temporários
+    # Remove healthcheck ou ajuste para algo mais simples
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+    restart: unless-stopped
