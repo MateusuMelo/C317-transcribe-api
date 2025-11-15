@@ -147,7 +147,7 @@ class TranscriptionService:
             self,
             audio_chunk: bytes,
             task: str = "transcribe",
-            language: Optional[str] = None,
+            language: Optional[str] = 'pt',
             sample_rate: int = 16000,
             channels: int = 1
     ) -> str:

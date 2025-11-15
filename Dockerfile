@@ -1,9 +1,12 @@
 FROM python:3.11-slim
 
-# Install system dependencies
+# Install system dependencies including build tools for pyaudio
 RUN apt-get update && apt-get install -y \
     ffmpeg \
     curl \
+    gcc \
+    g++ \
+    portaudio19-dev \
     && rm -rf /var/lib/apt/lists/* \
     && apt-get clean
 

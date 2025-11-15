@@ -17,8 +17,7 @@ services:
       - MODEL_CACHE_DIR=/app/models
       - TEMP_UPLOAD_DIR=/tmp
     volumes:
-      - ./data/temp_uploads:/tmp  # Para arquivos temporários
-    # Remove healthcheck ou ajuste para algo mais simples
+      - ./data/temp_uploads:/tmp
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
       interval: 30s

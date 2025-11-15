@@ -3,9 +3,11 @@ from fastapi import APIRouter, WebSocket, WebSocketDisconnect
 import json
 import base64
 import asyncio
+import logging
 from app.services.transcription_service import transcription_service
 
 router = APIRouter()
+logger = logging.getLogger(__name__)
 
 
 class ConnectionManager:
@@ -15,12 +17,21 @@ class ConnectionManager:
     async def connect(self, websocket: WebSocket):
         await websocket.accept()
         self.active_connections.append(websocket)
-        print(f"Client connected. Total: {len(self.active_connections)}")
+        logger.info(f"Client connected. Total: {len(self.active_connections)}")
 
     def disconnect(self, websocket: WebSocket):
         if websocket in self.active_connections:
             self.active_connections.remove(websocket)
-        print(f"Client disconnected. Total: {len(self.active_connections)}")
+            logger.info(f"Client disconnected. Total: {len(self.active_connections)}")
+        else:
+            logger.warning("Attempted to disconnect WebSocket that wasn't in active connections")
+
+    async def send_personal_message(self, message: str, websocket: WebSocket):
+        try:
+            await websocket.send_text(message)
+        except Exception as e:
+            logger.error(f"Error sending message: {e}")
+            self.disconnect(websocket)
 
 
 manager = ConnectionManager()
@@ -32,7 +43,7 @@ async def websocket_transcribe(websocket: WebSocket):
 
     try:
         await transcription_service.initialize()
-        print("Model ready for real-time transcription")
+        logger.info("Model ready for real-time transcription")
 
         async def audio_chunk_generator():
             """Generator for audio chunks"""
@@ -51,12 +62,13 @@ async def websocket_transcribe(websocket: WebSocket):
                         yield audio_data, sample_rate, channels
 
                 except asyncio.TimeoutError:
-                    print("No audio data received for 60 seconds")
+                    logger.warning("No audio data received for 60 seconds")
                     break
                 except WebSocketDisconnect:
+                    logger.info("WebSocket disconnected during audio reception")
                     break
                 except Exception as e:
-                    print(f"Error receiving audio: {e}")
+                    logger.error(f"Error receiving audio: {e}")
                     continue
 
         # Process audio stream in real-time
@@ -73,12 +85,13 @@ async def websocket_transcribe(websocket: WebSocket):
                     "text": transcription,
                     "timestamp": asyncio.get_event_loop().time()
                 }
-                await websocket.send_text(json.dumps(response))
-                print(f"📤 Sent transcription: {transcription}")
+                await manager.send_personal_message(json.dumps(response), websocket)
+                logger.debug(f"📤 Sent transcription: {transcription}")
 
     except WebSocketDisconnect:
-        print("Client disconnected")
-        manager.disconnect(websocket)
+        logger.info("Client disconnected normally")
     except Exception as e:
-        print(f"WebSocket error: {e}")
+        logger.error(f"WebSocket error: {e}")
+    finally:
+        # Always ensure connection is cleaned up
         manager.disconnect(websocket)

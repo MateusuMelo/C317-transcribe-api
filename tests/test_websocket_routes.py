@@ -1,10 +1,11 @@
 # tests/test_websocket_routes.py
-import pytest
-import json
 import base64
-import asyncio
-from unittest.mock import AsyncMock, patch, MagicMock
+import json
+from unittest.mock import AsyncMock, patch
+
+import pytest
 from fastapi.testclient import TestClient
+
 from app.main import app
 
 
@@ -256,7 +257,7 @@ class TestWebSocketRoutes:
 
     @pytest.mark.asyncio
     async def test_websocket_disconnect(self, client, mock_transcription_service, fresh_manager):
-        """Test WebSocket client disconnect"""
+        """Test WebSocket client disconnect handling"""
         # Connection manager should track disconnections
         initial_connections = len(fresh_manager.active_connections)
 
@@ -266,96 +267,131 @@ class TestWebSocketRoutes:
         # After context manager exits, connection should be removed
         assert len(fresh_manager.active_connections) == initial_connections
 
-
-    def test_connection_manager(self):
-        """Test ConnectionManager class functionality"""
+    @pytest.mark.asyncio
+    async def test_connection_manager_functionality(self):
+        """Test ConnectionManager class basic functionality"""
         from app.routes.websocket import ConnectionManager
+
         manager = ConnectionManager()
-        mock_websocket = MagicMock()
+        mock_websocket = AsyncMock()
+        mock_websocket.accept = AsyncMock()
 
         # Test connect
-        asyncio.run(manager.connect(mock_websocket))
+        await manager.connect(mock_websocket)
         assert len(manager.active_connections) == 1
         assert mock_websocket in manager.active_connections
+        mock_websocket.accept.assert_called_once()
 
         # Test disconnect
         manager.disconnect(mock_websocket)
         assert len(manager.active_connections) == 0
         assert mock_websocket not in manager.active_connections
 
-        # Test disconnect with non-existent connection
-        manager.disconnect(MagicMock())  # Should not crash
+        # Test disconnect with non-existent connection (should not crash)
+        manager.disconnect(AsyncMock())
 
+    @pytest.mark.asyncio
+    async def test_websocket_concurrent_operations(self, client):
+        """Test concurrent WebSocket operations with multiple messages"""
+        with patch('app.routes.websocket.transcription_service') as mock_service:
+            mock_service.initialize = AsyncMock()
+            # Use side_effect to handle multiple calls
+            transcriptions = ["Concurrent test 1", "Concurrent test 2", "Concurrent test 3"]
+            mock_service.transcribe_audio_chunk = AsyncMock(side_effect=transcriptions)
 
-@pytest.mark.asyncio
-async def test_websocket_concurrent_operations(client, mock_transcription_service):
-    """Test concurrent WebSocket operations"""
-    # Use side_effect to handle multiple calls
-    transcriptions = ["Concurrent test 1", "Concurrent test 2", "Concurrent test 3"]
-    mock_transcription_service.transcribe_audio_chunk.side_effect = transcriptions
+            with client.websocket_connect("/ws/transcribe") as websocket:
+                # Send multiple messages sequentially
+                for i in range(3):
+                    test_audio = f"audio_data_{i}".encode()
+                    audio_b64 = base64.b64encode(test_audio).decode('utf-8')
+                    message = {
+                        "type": "audio_chunk",
+                        "data": audio_b64
+                    }
+                    websocket.send_text(json.dumps(message))
 
-    async def send_audio_messages(websocket, count):
-        """Helper to send multiple audio messages"""
-        for i in range(count):
-            test_audio = f"audio_data_{i}".encode()
-            audio_b64 = base64.b64encode(test_audio).decode('utf-8')
-            message = {
-                "type": "audio_chunk",
-                "data": audio_b64
-            }
-            websocket.send_text(json.dumps(message))
-            await asyncio.sleep(0.1)  # Small delay
+                    # Receive response for each message
+                    response = websocket.receive_text()
+                    response_data = json.loads(response)
+                    assert response_data["type"] == "transcription"
+                    assert response_data["text"] == f"Concurrent test {i + 1}"
 
-    async def receive_transcriptions(websocket, count):
-        """Helper to receive multiple transcriptions"""
-        received = []
-        for i in range(count):
-            try:
+                # Verify all calls were made
+                assert mock_service.transcribe_audio_chunk.call_count == 3
+
+    @pytest.mark.asyncio
+    async def test_websocket_large_audio_chunk(self, client):
+        """Test WebSocket with large audio chunk data"""
+        with patch('app.routes.websocket.transcription_service') as mock_service:
+            mock_service.initialize = AsyncMock()
+            mock_service.transcribe_audio_chunk = AsyncMock(return_value="Large audio processed")
+
+            with client.websocket_connect("/ws/transcribe") as websocket:
+                # Create larger audio data
+                large_audio_data = b"x" * 10000  # 10KB of data
+                audio_b64 = base64.b64encode(large_audio_data).decode('utf-8')
+
+                message = {
+                    "type": "audio_chunk",
+                    "data": audio_b64,
+                    "sample_rate": 44100,  # Higher sample rate
+                    "channels": 2  # Stereo
+                }
+
+                websocket.send_text(json.dumps(message))
                 response = websocket.receive_text()
                 response_data = json.loads(response)
-                received.append(response_data)
-            except Exception:
-                break
-        return received
 
-    with client.websocket_connect("/ws/transcribe") as websocket:
-        # Send multiple messages
-        await send_audio_messages(websocket, 3)
-        responses = await receive_transcriptions(websocket, 3)
+                assert response_data["type"] == "transcription"
+                assert response_data["text"] == "Large audio processed"
 
-        assert len(responses) == 3
-        for i, response in enumerate(responses):
-            assert response["type"] == "transcription"
-            assert response["text"] == f"Concurrent test {i + 1}"
+                # Verify service was called with correct parameters
+                mock_service.transcribe_audio_chunk.assert_called_once_with(
+                    large_audio_data,
+                    sample_rate=44100,
+                    channels=2
+                )
+
+
+# Standalone test functions that don't need class fixtures
+@pytest.mark.asyncio
+async def test_connection_manager_standalone():
+    """Test ConnectionManager functionality outside test class"""
+    from app.routes.websocket import ConnectionManager
+
+    manager = ConnectionManager()
+    mock_websocket = AsyncMock()
+    mock_websocket.accept = AsyncMock()
+
+    # Test basic functionality
+    await manager.connect(mock_websocket)
+    assert len(manager.active_connections) == 1
+
+    manager.disconnect(mock_websocket)
+    assert len(manager.active_connections) == 0
 
 
 @pytest.mark.asyncio
-async def test_websocket_large_audio_chunk(client, mock_transcription_service):
-    """Test WebSocket with large audio chunk"""
-    mock_transcription_service.transcribe_audio_chunk.return_value = "Large audio processed"
+async def test_connection_manager_multiple_connections():
+    """Test ConnectionManager with multiple connections"""
+    from app.routes.websocket import ConnectionManager
 
-    with client.websocket_connect("/ws/transcribe") as websocket:
-        # Create larger audio data
-        large_audio_data = b"x" * 10000  # 10KB of data
-        audio_b64 = base64.b64encode(large_audio_data).decode('utf-8')
+    manager = ConnectionManager()
 
-        message = {
-            "type": "audio_chunk",
-            "data": audio_b64,
-            "sample_rate": 44100,  # Higher sample rate
-            "channels": 2  # Stereo
-        }
+    # Create multiple mock WebSockets
+    mock_websockets = [AsyncMock() for _ in range(3)]
+    for ws in mock_websockets:
+        ws.accept = AsyncMock()
+        await manager.connect(ws)
 
-        websocket.send_text(json.dumps(message))
-        response = websocket.receive_text()
-        response_data = json.loads(response)
+    assert len(manager.active_connections) == 3
 
-        assert response_data["type"] == "transcription"
-        assert response_data["text"] == "Large audio processed"
+    # Disconnect one
+    manager.disconnect(mock_websockets[0])
+    assert len(manager.active_connections) == 2
 
-        # Verify service was called with correct parameters
-        mock_transcription_service.transcribe_audio_chunk.assert_called_once_with(
-            large_audio_data,
-            sample_rate=44100,
-            channels=2
-        )
+    # Disconnect remaining
+    for ws in mock_websockets[1:]:
+        manager.disconnect(ws)
+
+    assert len(manager.active_connections) == 0
