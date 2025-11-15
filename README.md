@@ -67,7 +67,13 @@ brew install ffmpeg
 # Windows
 # Baixe do site oficial: https://ffmpeg.org/download.html
 ```
-
+#### Instale o PyAudio (para o cliente)
+```bash
+sudo apt-get install portaudio19-dev
+uv add pyaudio
+#or pip
+pip install pyaudio
+```
 ---
 
 ## 🚀 Uso
@@ -84,19 +90,72 @@ docker-compose up --build
 
 A API estará disponível em: [http://localhost:8000](http://localhost:8000)
 
-### Teste Rápido com Cliente
 
-```bash
-python tests/client_test.py
-```
 
-**Modos Disponíveis:**
-- 🧪 Teste Rápido – grava 3 segundos
-- 🔄 Modo Contínuo – transcrição em loop
-- 🔍 Listar Dispositivos – mostra microfones
 
 ---
 
+## 🔌 Exemplo de Cliente Simples (Python)
+
+Este é o cliente mais básico possível, sem classes, apenas o essencial para integração:
+
+```python
+import asyncio
+import websockets
+import pyaudio
+import base64
+import json
+
+WS_URL = "ws://localhost:8000/ws/transcribe"
+
+CHUNK = 1024
+RATE = 16000
+CHANNELS = 1
+FORMAT = pyaudio.paInt16
+
+async def main():
+    async with websockets.connect(WS_URL) as ws:
+        print("Conectado ao servidor WebSocket.")
+
+        pa = pyaudio.PyAudio()
+        stream = pa.open(
+            format=FORMAT,
+            channels=CHANNELS,
+            rate=RATE,
+            input=True,
+            frames_per_buffer=CHUNK
+        )
+
+        async def send_audio():
+            while True:
+                data = stream.read(CHUNK, exception_on_overflow=False)
+                audio_b64 = base64.b64encode(data).decode("utf-8")
+
+                message = {
+                    "type": "audio_chunk",
+                    "data": audio_b64,
+                    "is_final": False,
+                    "task": "transcribe"
+                }
+
+                await ws.send(json.dumps(message))
+
+        async def receive_text():
+            while True:
+                response = await ws.recv()
+                data = json.loads(response)
+
+                if data.get("type") == "transcription":
+                    print("Transcrição:", data["text"])
+
+        await asyncio.gather(send_audio(), receive_text())
+
+if __name__ == "__main__":
+    asyncio.run(main())
+```
+
+
+---
 ## 📡 API Endpoints
 
 ### Health Check
@@ -143,12 +202,21 @@ WS /ws/transcribe
 
 **Mensagens enviadas:**
 ```json
-{"type": "audio_chunk", "data": "base64_audio", "is_final": false}
+{
+  "type": "audio_chunk",
+  "data": "base64_audio_data",
+  "sample_rate": 16000,
+  "channels": 1
+}
 ```
 
 **Mensagens recebidas:**
 ```json
-{"type": "transcription", "text": "transcrição do áudio", "is_final": false}
+{
+  "type": "transcription",
+  "text": "transcrição do áudio",
+  "timestamp": 1234567890.123
+}
 ```
 
 ---
