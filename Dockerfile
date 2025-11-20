@@ -13,11 +13,11 @@ RUN apt-get update && apt-get install -y \
 # Set working directory
 WORKDIR /app
 
-# Copy requirements first for better caching
+# Copy project metadata
 COPY pyproject.toml .
 
 # Install Python dependencies
-RUN pip install  .
+RUN pip install .
 
 # Copy application code
 COPY . .
@@ -25,15 +25,26 @@ COPY . .
 # Create directory for models
 RUN mkdir -p /app/models
 
-# Copy pre-downloaded Whisper model
-COPY data/models /app/models
+# ----------------------------------------
+# 👉 Baixar Whisper BASE durante o build
+# ----------------------------------------
+ENV WHISPER_MODEL_SIZE="base"
+ENV MODEL_CACHE_DIR="/app/models"
 
-# Set environment variable to use local model
-ENV MODEL_CACHE_DIR=/app/models
-ENV WHISPER_MODEL_CACHE=/app/models
+RUN python3 - <<EOF
+from faster_whisper import WhisperModel
+import os
+
+model_size = os.getenv("WHISPER_MODEL_SIZE")
+cache_dir  = os.getenv("MODEL_CACHE_DIR")
+
+print(f"📥 Baixando Whisper '{model_size}' em '{cache_dir}'...")
+WhisperModel(model_size, download_root=cache_dir)
+print("✅ Modelo Whisper baixado com sucesso!")
+EOF
 
 # Expose port
 EXPOSE 8000
 
-# Run the application
+# Run application
 CMD ["uvicorn", "src.main:app", "--host", "0.0.0.0", "--port", "8000"]
