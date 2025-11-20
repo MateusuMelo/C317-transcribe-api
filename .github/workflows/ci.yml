@@ -18,7 +18,7 @@ jobs:
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
-          python-version: "3.10"
+          python-version: "3.12"
 
       - name: Install UV
         uses: astral-sh/setup-uv@v1
@@ -29,7 +29,9 @@ jobs:
         run: uv sync
 
       - name: Run pytest
-        run: uv run pytest -v
+        run: |
+          export PYTHONPATH="$PYTHONPATH:$(pwd)"
+          uv run pytest -v
 
   docker-build:
     name: Docker Compose Build
