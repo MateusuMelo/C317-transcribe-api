@@ -1,12 +1,11 @@
 from typing import AsyncGenerator
 
 from fastapi import APIRouter, UploadFile, File, HTTPException, BackgroundTasks
-from starlette.responses import StreamingResponse
 
-from app.core.config import settings
-from app.models.schemas import TranscriptionRequest, TranscriptionResponse
-from app.services.transcription_service import transcription_service
-from app.utils.file_handlers import FileHandler
+from src.core.config import settings
+from src.models.schemas import TranscriptionRequest, TranscriptionResponse
+from src.services.transcription_service import transcription_service
+from src.utils.file_handlers import FileHandler
 
 router = APIRouter()
 

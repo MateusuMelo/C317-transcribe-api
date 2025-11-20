@@ -2,8 +2,8 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
-from app.core.config import settings
-from app.routes import transcription, websocket
+from src.core.config import settings
+from src.routes import transcription, websocket
 
 app = FastAPI(
     title="Audio Translation API",
@@ -21,7 +21,7 @@ app.add_middleware(
 )
 
 # Serve static files
-app.mount("/static", StaticFiles(directory="app/static"), name="static")
+app.mount("/static", StaticFiles(directory="src/static"), name="static")
 
 # Routes
 app.include_router(transcription.router, prefix="/api/v1", tags=["transcription"])
@@ -30,7 +30,7 @@ app.include_router(websocket.router, tags=["websocket"])
 
 @app.get("/")
 async def read_index():
-    return FileResponse('app/static/index.html')
+    return FileResponse('src/static/index.html')
 
 
 @app.get("/health")
@@ -42,7 +42,7 @@ if __name__ == "__main__":
     import uvicorn
 
     uvicorn.run(
-        "app.main:app",
+        "src.main:app",
         host=settings.API_HOST,
         port=settings.API_PORT,
         reload=settings.API_RELOAD

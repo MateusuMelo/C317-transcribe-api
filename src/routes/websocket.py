@@ -4,7 +4,7 @@ import json
 import base64
 import asyncio
 import logging
-from app.services.transcription_service import transcription_service
+from src.services.transcription_service import transcription_service
 
 router = APIRouter()
 logger = logging.getLogger(__name__)

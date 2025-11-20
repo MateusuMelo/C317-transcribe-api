@@ -11,9 +11,9 @@ from faster_whisper import WhisperModel
 from pydub import AudioSegment
 from pydub.generators import Sine
 
-from app.core.config import settings
-from app.models.schemas import TranscriptionResponse
-from app.utils.audio_converters import AudioConverter
+from src.core.config import settings
+from src.models.schemas import TranscriptionResponse
+from src.utils.audio_converters import AudioConverter
 
 
 class TranscriptionService:

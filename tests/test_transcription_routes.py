@@ -9,9 +9,9 @@ import pytest
 from fastapi.testclient import TestClient
 from starlette.websockets import WebSocketDisconnect
 
-from app.main import app
-from app.models.schemas import TranscriptionResponse
-from app.services.transcription_service import transcription_service
+from src.main import app
+from src.models.schemas import TranscriptionResponse
+from src.services.transcription_service import transcription_service
 
 
 @pytest.fixture
@@ -47,7 +47,7 @@ def test_transcribe_file_success(client):
     """Test successful file transcription with proper mocking"""
 
     # Mock the entire transcription service
-    with patch('app.routes.transcription.transcription_service') as mock_service:
+    with patch('src.routes.transcription.transcription_service') as mock_service:
         # Create a mock response
         mock_response = TranscriptionResponse(
             text="Test transcription result",
@@ -89,7 +89,7 @@ def test_transcribe_file_success(client):
 def test_transcribe_file_with_custom_parameters(client):
     """Test transcription with custom task and language"""
 
-    with patch('app.routes.transcription.transcription_service') as mock_service:
+    with patch('src.routes.transcription.transcription_service') as mock_service:
         mock_response = TranscriptionResponse(
             text="Transcrição em português",
             language="pt",
@@ -122,7 +122,7 @@ def test_transcribe_file_with_custom_parameters(client):
 def test_transcribe_file_no_file_uploaded(client):
     """Test when no file is uploaded"""
 
-    with patch('app.routes.transcription.transcription_service') as mock_service:
+    with patch('src.routes.transcription.transcription_service') as mock_service:
         mock_service.transcribe_audio_file = AsyncMock()
 
         response = client.post("/api/v1/transcribe/file")
@@ -142,7 +142,7 @@ def test_transcribe_file_invalid_extension(client):
 
 
 def test_transcribe_file_too_large(client, monkeypatch):
-    monkeypatch.setattr("app.core.config.settings.MAX_AUDIO_SIZE_MB", 1)
+    monkeypatch.setattr("src.core.config.settings.MAX_AUDIO_SIZE_MB", 1)
     big_file = io.BytesIO(b"X" * (2 * 1024 * 1024))  # 2MB
     response = client.post(
         "/api/v1/transcribe/file",

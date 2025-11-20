@@ -25,7 +25,7 @@ class Settings(BaseSettings):
 
     TEMP_UPLOAD_DIR: str = os.getenv("TEMP_UPLOAD_DIR", str(BASE_DIR / "tmp"))
     MODEL_CACHE_DIR: str = os.getenv("MODEL_CACHE_DIR", str(BASE_DIR / "models"))
-    LOG_FILE: str = os.getenv("LOG_FILE", str(BASE_DIR / "logs" / "app.log"))
+    LOG_FILE: str = os.getenv("LOG_FILE", str(BASE_DIR / "logs" / "src.log"))
 
     # Logging
     LOG_LEVEL: str = "INFO"

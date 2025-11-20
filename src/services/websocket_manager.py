@@ -3,8 +3,8 @@ from typing import List, Dict
 
 from fastapi import WebSocket
 
-from app.models.schemas import WebSocketMessage
-from app.services.transcription_service import transcription_service
+from src.models.schemas import WebSocketMessage
+from src.services.transcription_service import transcription_service
 
 
 class ConnectionManager:
