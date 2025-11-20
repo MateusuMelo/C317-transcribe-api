@@ -1,3 +1,6 @@
+[![Tests](https://github.com/MateusuMelo/C317-transcribe-api/actions/workflows/ci.yml/badge.svg)](https://github.com/MateusuMelo/C317-transcribe-api/actions/workflows/ci.yml)
+![Python Version](https://img.shields.io/badge/python-3.12-blue)
+
 # 🎙️ Audio Transcription API
 
 Uma API completa para transcrição de áudio em tempo real usando Whisper, com cliente interativo para testes.
